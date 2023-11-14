@@ -3,10 +3,15 @@
 ### Firmware details
 
 friWrt Default Image information
+
 Default IP: 192.168.1.1
+
 Default username: root
+
 Default password: none
+
 Default WIFI name: friWrt_5g
+
 Default WIFI password: none
 
 ### Acknowledgments
