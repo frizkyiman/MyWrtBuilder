@@ -1,38 +1,30 @@
 #!/bin/bash
 
-echo "Start Builder Patch !"
+echo "Start Clash Core Download !"
 echo "Current Path: $PWD"
 
-if [ "$BRANCH" == "snapshots" ]; then
-    cd $GITHUB_WORKSPACE/$BASE-imagebuilder-bcm27xx-bcm2711.Linux-x86_64 || exit
-else
-    cd $GITHUB_WORKSPACE/$BASE-imagebuilder-$BRANCH-bcm27xx-bcm2711.Linux-x86_64 || exit
-fi
+mkdir -p files/etc/openclash/core
+cd files/etc/openclash/core || { echo "Clash core path does not exist!"; exit 1; }
 
-version=$(echo "$BRANCH" | cut -d'.' -f1)
+urls=("https://github.com/MetaCubeX/Clash.Meta/releases/download/v1.16.0/clash.meta-linux-arm64-v1.16.0.gz"
+      "https://github.com/vernesong/OpenClash/raw/core/master/premium/clash-linux-arm64-2023.08.17.gz"
+      "https://github.com/vernesong/OpenClash/raw/core/master/dev/clash-linux-arm64.tar.gz")
+targets=("clash_meta" "clash_tun" "clash")
 
-if [ "$version" == "21" ]; then
-    branch_main=$(echo "$BRANCH" | awk -F'.' '{print $1"."$2}')
-elif [ "$version" == "22" ] || [ "$version" == "23" ] || [ "$BRANCH" == "snapshots" ]; then
-    branch_main=main
-fi
+extract_and_cleanup() {
+  local extracted_file=$(basename "$1") temp_dir=$(mktemp -d)
 
-if [ "$ROOTFS_SQUASHFS" == "true" ]; then
-    option_squashfs="CONFIG_TARGET_ROOTFS_SQUASHFS=y"
-else
-    option_squashfs="# CONFIG_TARGET_ROOTFS_SQUASHFS is not set"
-fi
+  if tar -zxf "$extracted_file" -C "$temp_dir" && mv "$temp_dir"/* "$2"; then
+    echo "Success using tar!"
+  elif gzip -dc "$extracted_file" > "$2"; then
+    echo "Success using gzip!"
+  else
+    echo "Failed to extract $extracted_file"
+  fi
 
-# Custom Repository
-sed -i "13i\src/gz custom_generic https://raw.githubusercontent.com/lrdrdn/my-opkg-repo/$branch_main/generic" repositories.conf
-sed -i "14i\src/gz custom_arch https://raw.githubusercontent.com/lrdrdn/my-opkg-repo/$branch_main/aarch64_cortex-a72" repositories.conf
-sed -i "s/option check_signature/# option check_signature/g" repositories.conf
+  rm -f "$extracted_file" "$temp_dir"/*
+}
 
-# Force opkg to overwrite files
-#sed -i "s/install \$(BUILD_PACKAGES)/install \$(BUILD_PACKAGES) --force-overwrite/" Makefile
-
-# Resize Boot and Rootfs partition size
-sed -i "s/CONFIG_TARGET_KERNEL_PARTSIZE=.*/CONFIG_TARGET_KERNEL_PARTSIZE=128/" .config
-sed -i "s/CONFIG_TARGET_ROOTFS_PARTSIZE=.*/CONFIG_TARGET_ROOTFS_PARTSIZE=$ROOTFS_SIZE/" .config
-sed -i "s/CONFIG_TARGET_ROOTFS_SQUASHFS=y/$option_squashfs/" .config
-sed -i "s/CONFIG_PACKAGE_kmod-rtl8821cu=m/CONFIG_PACKAGE_kmod-rtl8821cu=y/" .config
+for ((i=0; i<${#urls[@]}; i++)); do
+  wget -q "${urls[i]}" && extract_and_cleanup "${urls[i]}" "${targets[i]}" || echo "Failed to download ${urls[i]}"
+done
